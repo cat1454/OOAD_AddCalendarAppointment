@@ -1,9 +1,81 @@
 @startuml
-title Add Calendar Appointment - Class Diagram Placeholder
+title Add Calendar Appointment - Domain Model Class Diagram
 
-package "calendarappointment" {
-    ' Domain model classes will be added in Phase 2.
-    ' Expected concepts include appointments, reminders, calendars, and group meetings.
+package "calendarappointment.model" {
+    class User {
+        - String userId
+        - String fullName
+        - List<Appointment> appointments
+        - List<Reminder> reminders
+        + addAppointment(Appointment appointment)
+        + removeAppointment(Appointment appointment)
+        + addReminder(Reminder reminder)
+        + joinGroupMeeting(GroupMeeting groupMeeting)
+    }
+
+    class Calendar {
+        - List<Appointment> appointments
+        - List<Reminder> reminders
+        - List<GroupMeeting> groupMeetings
+        + addAppointment(Appointment appointment)
+        + removeAppointment(Appointment appointment)
+        + addReminder(Reminder reminder)
+        + addGroupMeeting(GroupMeeting groupMeeting)
+        + findConflict(Appointment appointment) : Optional<Appointment>
+        + findMatchingGroupMeeting(Appointment appointment) : Optional<GroupMeeting>
+    }
+
+    class Appointment {
+        - String appointmentId
+        - String name
+        - String location
+        - LocalDateTime startTime
+        - LocalDateTime endTime
+        + getDuration() : Duration
+        + overlapsWith(Appointment other) : boolean
+        + hasSameNameAndDuration(Appointment other) : boolean
+        + toDisplayRow() : String
+    }
+
+    class GroupMeeting {
+        - List<User> participants
+        + addParticipant(User user)
+        + removeParticipant(User user)
+        + hasParticipant(User user) : boolean
+    }
+
+    class Reminder {
+        - String reminderId
+        - String appointmentId
+        - LocalDateTime remindAt
+        - String message
+        - ReminderMethod method
+    }
+
+    class ValidationResult {
+        - boolean valid
+        - String message
+        + success() : ValidationResult
+        + failure(String message) : ValidationResult
+        + isValid() : boolean
+        + getMessage() : String
+    }
+
+    enum ReminderMethod {
+        NONE
+        POPUP
+        EMAIL
+        SMS
+    }
 }
+
+GroupMeeting --|> Appointment
+User "1" o-- "0..*" Appointment
+User "1" o-- "0..*" Reminder
+Calendar "1" o-- "0..*" Appointment
+Calendar "1" o-- "0..*" Reminder
+Calendar "1" o-- "0..*" GroupMeeting
+GroupMeeting "1" o-- "0..*" User : participants
+Reminder --> ReminderMethod
 
 @enduml

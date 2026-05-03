@@ -16,9 +16,9 @@ The application will later demonstrate a user viewing appointments and choosing 
 
 ## Current Development Phase
 
-The project is currently in **Phase 1 - Project foundation**.
+The project is currently in **Phase 2 - Domain model**.
 
-This phase sets up the Maven project structure, documentation folders, diagram folders, and a minimal Java entry point. It does not implement the domain model, validation logic, appointment algorithm, or Swing UI yet.
+This phase adds the core in-memory domain classes for users, appointments, group meetings, reminders, calendar storage, and validation results. It also seeds simple demo data that can be printed from the console entry point. The validation logic, appointment algorithm, and Swing UI are still intentionally left for later phases.
 
 ## Planned Phases
 
@@ -40,12 +40,22 @@ Expected output:
 
 ```text
 Add Calendar Appointment OOAD Demo - Project foundation is ready.
+Demo user:
+User{userId='U001', fullName='Demo User', appointments=0, reminders=0}
+
+Existing appointments:
+- Math Class | Room A101 | 2026-05-04T08:00 - 2026-05-04T09:00
+
+Existing group meetings:
+- Project Meeting | Room B202 | 2026-05-04T10:00 - 2026-05-04T11:00
+
+Reminders count: 0
 ```
 
 ## Progress Checklist
 
 - [x] Phase 1 - Project foundation
-- [ ] Phase 2 - Domain model
+- [x] Phase 2 - Domain model
 - [ ] Phase 3 - Core algorithm
 - [ ] Phase 4 - Swing UI
 - [ ] Phase 5 - Diagrams and demo report
