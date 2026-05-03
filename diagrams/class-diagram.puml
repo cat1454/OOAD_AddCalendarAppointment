@@ -1,0 +1,9 @@
+@startuml
+title Add Calendar Appointment - Class Diagram Placeholder
+
+package "calendarappointment" {
+    ' Domain model classes will be added in Phase 2.
+    ' Expected concepts include appointments, reminders, calendars, and group meetings.
+}
+
+@enduml

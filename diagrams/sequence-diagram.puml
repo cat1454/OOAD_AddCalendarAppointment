@@ -1,0 +1,14 @@
+@startuml
+title Add Calendar Appointment - Sequence Diagram Placeholder
+
+actor User
+participant "Main UI" as MainUI
+participant "Add Appointment Window" as AddAppointmentWindow
+participant "Calendar Service" as CalendarService
+
+note over User, CalendarService
+The final sequence diagram will be completed after
+the core appointment algorithm is implemented.
+end note
+
+@enduml
