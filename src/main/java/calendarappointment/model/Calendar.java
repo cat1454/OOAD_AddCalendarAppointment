@@ -45,6 +45,10 @@ public class Calendar {
         }
     }
 
+    public void removeGroupMeeting(GroupMeeting groupMeeting) {
+        groupMeetings.remove(groupMeeting);
+    }
+
     public Optional<Appointment> findConflict(Appointment appointment) {
         Optional<Appointment> normalAppointmentConflict = appointments.stream()
                 .filter(existingAppointment -> existingAppointment.overlapsWith(appointment))

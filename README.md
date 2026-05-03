@@ -16,9 +16,9 @@ The application will later demonstrate a user viewing appointments and choosing 
 
 ## Current Development Phase
 
-The project is currently in **Phase 2 - Domain model**.
+The project is currently in **Phase 3 - Core algorithm**.
 
-This phase adds the core in-memory domain classes for users, appointments, group meetings, reminders, calendar storage, and validation results. It also seeds simple demo data that can be printed from the console entry point. The validation logic, appointment algorithm, and Swing UI are still intentionally left for later phases.
+This phase adds the controller and service logic for the Add Calendar Appointment use case. The console demo now validates appointment input, checks schedule conflicts, supports choosing another time or replacing an existing appointment, detects matching group meetings, joins a group meeting when selected, and adds reminders when a reminder method is selected. Swing UI and database storage are still intentionally left for later phases.
 
 ## Planned Phases
 
@@ -36,26 +36,32 @@ Use Maven from the project root:
 mvn clean compile exec:java
 ```
 
-Expected output:
+Expected output includes the startup information plus six console scenarios:
 
 ```text
-Add Calendar Appointment OOAD Demo - Project foundation is ready.
-Demo user:
-User{userId='U001', fullName='Demo User', appointments=0, reminders=0}
+=== Case 1: Invalid blank name ===
+Message: Appointment name is required.
 
-Existing appointments:
-- Math Class | Room A101 | 2026-05-04T08:00 - 2026-05-04T09:00
+=== Case 2: Invalid duration ===
+Message: End time must be after start time.
 
-Existing group meetings:
-- Project Meeting | Room B202 | 2026-05-04T10:00 - 2026-05-04T11:00
+=== Case 3: Conflict with Math Class, choose another time ===
+Message: This time conflicts with Math Class. Please choose another available time.
 
-Reminders count: 0
+=== Case 4: Conflict with Math Class, replace existing ===
+Message: Replaced Math Class with Chemistry Lab.
+
+=== Case 5: Match Project Meeting, join group meeting ===
+Message: Joined existing group meeting: Project Meeting.
+
+=== Case 6: Normal appointment with reminder ===
+Message: Added appointment: Dentist Appointment.
 ```
 
 ## Progress Checklist
 
 - [x] Phase 1 - Project foundation
 - [x] Phase 2 - Domain model
-- [ ] Phase 3 - Core algorithm
+- [x] Phase 3 - Core algorithm
 - [ ] Phase 4 - Swing UI
 - [ ] Phase 5 - Diagrams and demo report
