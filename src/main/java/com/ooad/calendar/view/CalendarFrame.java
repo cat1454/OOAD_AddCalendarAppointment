@@ -5,6 +5,7 @@ import com.ooad.calendar.entity.GroupMeeting;
 import com.ooad.calendar.entity.ReminderInfo;
 import com.ooad.calendar.entity.User;
 import com.ooad.calendar.model.AppointmentModel;
+import com.ooad.calendar.model.DemoDataModel;
 import com.ooad.calendar.model.GroupMeetingModel;
 import com.ooad.calendar.model.UserModel;
 import com.ooad.calendar.presenter.AppointmentPresenter;
@@ -17,10 +18,12 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -32,7 +35,9 @@ import java.awt.event.MouseEvent;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
@@ -43,6 +48,7 @@ public class CalendarFrame extends JFrame {
     private final AppointmentModel appointmentModel;
     private final GroupMeetingModel groupMeetingModel;
     private final UserModel userModel;
+    private final DemoDataModel demoDataModel;
     private final CalendarWeekPanel weekPanel;
     private final JLabel titleLabel = new JLabel();
     private final JPanel miniMonthPanel = new JPanel();
@@ -54,23 +60,27 @@ public class CalendarFrame extends JFrame {
     private final JList<Appointment> appointmentList = new JList<>(appointmentListModel);
     private final DefaultListModel<ReminderInfo> reminderListModel = new DefaultListModel<>();
     private final JList<ReminderInfo> reminderList = new JList<>(reminderListModel);
-    private LocalDate selectedDate = LocalDate.of(2026, 5, 4);
+    private JScrollPane calendarScrollPane;
+    private LocalDate today = systemToday();
+    private LocalDate selectedDate = today;
+    private LocalDate visibleWeekStart;
     private AppointmentPresenter presenter;
 
     public CalendarFrame(int currentUserId, AppointmentModel appointmentModel, GroupMeetingModel groupMeetingModel,
-                         UserModel userModel) {
+                         UserModel userModel, DemoDataModel demoDataModel) {
         super("Calendar");
         this.currentUserId = currentUserId;
         this.appointmentModel = appointmentModel;
         this.groupMeetingModel = groupMeetingModel;
         this.userModel = userModel;
+        this.demoDataModel = demoDataModel;
         this.weekPanel = new CalendarWeekPanel(this::openAddDialog, this::openEditDialog);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1180, 760));
         setLocationByPlatform(true);
         buildUi();
         refreshUsers();
-        refreshCalendar();
+        refreshCalendar(true);
     }
 
     public void setPresenter(AppointmentPresenter presenter) {
@@ -78,12 +88,20 @@ public class CalendarFrame extends JFrame {
     }
 
     public void refreshCalendar() {
-        LocalDate weekStart = startOfWeek(selectedDate);
-        List<Appointment> appointments = appointmentModel.findByWeek(currentUserId, weekStart);
+        refreshCalendar(false);
+    }
+
+    private void refreshCalendar(boolean scrollToCurrentTime) {
+        today = systemToday();
+        visibleWeekStart = startOfWeek(selectedDate);
+        List<Appointment> appointments = appointmentModel.findByWeek(currentUserId, visibleWeekStart);
         titleLabel.setText(selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")));
-        weekPanel.setWeek(weekStart, appointments);
+        weekPanel.setWeek(visibleWeekStart, today, selectedDate, appointments);
         rebuildMiniMonth();
         refreshSidebarDetails();
+        if (scrollToCurrentTime) {
+            scrollToCurrentTime();
+        }
     }
 
     private void buildUi() {
@@ -92,10 +110,11 @@ public class CalendarFrame extends JFrame {
         root.add(buildHeader(), BorderLayout.NORTH);
         root.add(buildSidebar(), BorderLayout.WEST);
 
-        JScrollPane scrollPane = new JScrollPane(weekPanel);
-        scrollPane.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(232, 234, 237)));
-        scrollPane.getVerticalScrollBar().setUnitIncrement(18);
-        root.add(scrollPane, BorderLayout.CENTER);
+        calendarScrollPane = new JScrollPane(weekPanel);
+        calendarScrollPane.setColumnHeaderView(weekPanel.getHeaderComponent());
+        calendarScrollPane.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(232, 234, 237)));
+        calendarScrollPane.getVerticalScrollBar().setUnitIncrement(18);
+        root.add(calendarScrollPane, BorderLayout.CENTER);
         setContentPane(root);
         pack();
     }
@@ -124,10 +143,7 @@ public class CalendarFrame extends JFrame {
         JButton prev = flatButton("‹");
         JButton next = flatButton("›");
         titleLabel.setFont(new Font("SansSerif", Font.PLAIN, 26));
-        today.addActionListener(e -> {
-            selectedDate = LocalDate.now();
-            refreshCalendar();
-        });
+        today.addActionListener(e -> goToToday());
         prev.addActionListener(e -> {
             selectedDate = selectedDate.minusWeeks(1);
             refreshCalendar();
@@ -158,7 +174,21 @@ public class CalendarFrame extends JFrame {
         create.setFont(new Font("SansSerif", Font.PLAIN, 16));
         create.setPreferredSize(new Dimension(134, 52));
         create.addActionListener(e -> openAddDialog(selectedDate.atTime(9, 0), selectedDate.atTime(10, 0)));
-        top.add(create, BorderLayout.NORTH);
+        JPanel createActions = new JPanel(new BorderLayout(0, 8));
+        createActions.setOpaque(false);
+        createActions.add(create, BorderLayout.NORTH);
+
+        JPanel demoActions = new JPanel(new java.awt.GridLayout(0, 1, 0, 6));
+        demoActions.setOpaque(false);
+        JButton seedDemo = roundedButton("Tạo dữ liệu demo");
+        JButton clearData = flatButton("Xóa dữ liệu");
+        seedDemo.addActionListener(e -> seedDemoData());
+        clearData.addActionListener(e -> clearData());
+        demoActions.add(seedDemo);
+        demoActions.add(clearData);
+        createActions.add(demoActions, BorderLayout.CENTER);
+
+        top.add(createActions, BorderLayout.NORTH);
         miniMonthPanel.setOpaque(false);
         top.add(miniMonthPanel, BorderLayout.CENTER);
 
@@ -340,6 +370,51 @@ public class CalendarFrame extends JFrame {
         }
     }
 
+    private void seedDemoData() {
+        int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Xóa toàn bộ dữ liệu và tạo dữ liệu demo cho ngày " + selectedDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + "?",
+                "Tạo dữ liệu demo",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        demoDataModel.seedDemoData(selectedDate);
+        currentUserId = 1;
+        refreshUsers();
+        refreshCalendar();
+        JOptionPane.showMessageDialog(
+                this,
+                """
+                        Đã tạo dữ liệu demo sau 07:30.
+
+                        Trùng lịch: tạo lịch đè lên 08:30-09:30.
+                        Tham gia nhóm: tạo lịch "Demo tham gia nhóm" lúc 09:45-10:45.
+                        Bình thường: dùng các lịch không trùng đang hiển thị.
+                        """,
+                "Dữ liệu demo đã sẵn sàng",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private void clearData() {
+        int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Xóa toàn bộ người dùng, lịch hẹn, nhắc hẹn và cuộc họp nhóm?",
+                "Xóa dữ liệu",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        demoDataModel.clearData();
+        refreshUsers();
+        refreshCalendar();
+    }
+
     private void refreshUsers() {
         userListModel.clear();
         List<User> users = userModel.findAll();
@@ -434,9 +509,16 @@ public class CalendarFrame extends JFrame {
             LocalDate date = ym.atDay(day);
             JButton button = miniMonthButton(String.valueOf(day));
             button.setFont(new Font("SansSerif", Font.PLAIN, 12));
-            if (date.equals(selectedDate)) {
+            boolean isToday = date.equals(today);
+            boolean isSelected = date.equals(selectedDate);
+            if (isToday) {
                 button.setForeground(Color.WHITE);
                 button.setBackground(GOOGLE_BLUE);
+                button.setOpaque(true);
+                button.setContentAreaFilled(true);
+            } else if (isSelected) {
+                button.setForeground(GOOGLE_BLUE);
+                button.setBackground(new Color(232, 240, 254));
                 button.setOpaque(true);
                 button.setContentAreaFilled(true);
             }
@@ -449,6 +531,27 @@ public class CalendarFrame extends JFrame {
         miniMonthPanel.add(grid, BorderLayout.CENTER);
         miniMonthPanel.revalidate();
         miniMonthPanel.repaint();
+    }
+
+    private void goToToday() {
+        today = systemToday();
+        selectedDate = today;
+        refreshCalendar(true);
+    }
+
+    private void scrollToCurrentTime() {
+        if (calendarScrollPane == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            LocalTime now = LocalTime.now(ZoneId.systemDefault());
+            int contextMinutes = 60;
+            int targetMinute = Math.max(0, now.getHour() * 60 + now.getMinute() - contextMinutes);
+            int targetY = weekPanel.scrollYForMinute(targetMinute);
+            JScrollBar verticalBar = calendarScrollPane.getVerticalScrollBar();
+            int maxValue = Math.max(0, verticalBar.getMaximum() - verticalBar.getVisibleAmount());
+            verticalBar.setValue(Math.min(targetY, maxValue));
+        });
     }
 
     private void openAddDialog(LocalDateTime startsAt, LocalDateTime endsAt) {
@@ -469,6 +572,10 @@ public class CalendarFrame extends JFrame {
 
     private LocalDate startOfWeek(LocalDate date) {
         return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+    }
+
+    private static LocalDate systemToday() {
+        return LocalDate.now(ZoneId.systemDefault());
     }
 
     private JButton roundedButton(String text) {

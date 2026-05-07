@@ -2,6 +2,7 @@ package com.ooad.calendar;
 
 import com.ooad.calendar.config.Database;
 import com.ooad.calendar.model.AppointmentModel;
+import com.ooad.calendar.model.DemoDataModel;
 import com.ooad.calendar.model.GroupMeetingModel;
 import com.ooad.calendar.model.UserModel;
 import com.ooad.calendar.presenter.AppointmentPresenter;
@@ -20,7 +21,8 @@ public class CalendarApplication {
                 AppointmentModel appointmentModel = new AppointmentModel();
                 GroupMeetingModel groupMeetingModel = new GroupMeetingModel();
                 UserModel userModel = new UserModel();
-                CalendarFrame frame = new CalendarFrame(1, appointmentModel, groupMeetingModel, userModel);
+                DemoDataModel demoDataModel = new DemoDataModel();
+                CalendarFrame frame = new CalendarFrame(1, appointmentModel, groupMeetingModel, userModel, demoDataModel);
                 AppointmentPresenter presenter = new AppointmentPresenter(
                         appointmentModel,
                         groupMeetingModel,

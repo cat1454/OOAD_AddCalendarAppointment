@@ -33,7 +33,7 @@ public class AppointmentPresenter {
         Appointment appointment = new Appointment(
                 dto.appointmentId() == null ? 0 : dto.appointmentId(),
                 dto.ownerId(),
-                null,
+                dto.groupMeeting() ? dto.groupMeetingId() : null,
                 dto.title().trim(),
                 dto.location().trim(),
                 dto.startsAt(),
@@ -43,14 +43,16 @@ public class AppointmentPresenter {
                 appointment.getReminders().add(new Reminder(reminder.minutesBefore(), reminder.message()))
         );
 
-        GroupMeeting group = groupMeetingModel.FindMatchingGroupMeeting(appointment);
-        if (group != null && view.RequestJoinGroupMeeting(group.title())) {
-            groupMeetingModel.AddParticipant(group.id(), dto.ownerId());
-            appointment.setGroupMeetingId(group.id());
-        } else if (dto.groupMeeting()) {
-            int groupId = groupMeetingModel.CreateGroupMeetingForAppointment(appointment);
-            groupMeetingModel.AddParticipant(groupId, dto.ownerId());
-            appointment.setGroupMeetingId(groupId);
+        if (appointment.getGroupMeetingId() == null) {
+            GroupMeeting group = groupMeetingModel.FindMatchingGroupMeeting(appointment);
+            if (group != null && view.RequestJoinGroupMeeting(group.title())) {
+                groupMeetingModel.AddParticipant(group.id(), dto.ownerId());
+                appointment.setGroupMeetingId(group.id());
+            } else if (dto.groupMeeting()) {
+                int groupId = groupMeetingModel.CreateGroupMeetingForAppointment(appointment);
+                groupMeetingModel.AddParticipant(groupId, dto.ownerId());
+                appointment.setGroupMeetingId(groupId);
+            }
         }
 
         if (dto.appointmentId() == null) {

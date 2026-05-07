@@ -5,6 +5,7 @@ import java.util.List;
 
 public record AppointmentDTO(
         Integer appointmentId,
+        Integer groupMeetingId,
         int ownerId,
         String title,
         String location,

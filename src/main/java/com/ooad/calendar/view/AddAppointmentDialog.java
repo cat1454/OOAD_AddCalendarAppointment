@@ -9,6 +9,7 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -45,6 +46,7 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
     private final int ownerId;
     private final AppointmentPresenter presenter;
     private final Integer appointmentId;
+    private final Integer groupMeetingId;
     private final JTextField titleField = new JTextField();
     private final JTextField locationField = new JTextField();
     private final JSpinner startSpinner;
@@ -64,6 +66,7 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
         this.ownerId = ownerId;
         this.presenter = presenter;
         this.appointmentId = null;
+        this.groupMeetingId = null;
         this.startSpinner = dateTimeSpinner(startsAt);
         this.endSpinner = dateTimeSpinner(endsAt);
         this.reminderDateTimeSpinner = dateTimeSpinner(startsAt.minusMinutes(30));
@@ -80,6 +83,7 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
         this.ownerId = appointment.getOwnerId();
         this.presenter = presenter;
         this.appointmentId = appointment.getId();
+        this.groupMeetingId = appointment.getGroupMeetingId();
         this.startSpinner = dateTimeSpinner(appointment.getStartsAt());
         this.endSpinner = dateTimeSpinner(appointment.getEndsAt());
         this.reminderDateTimeSpinner = dateTimeSpinner(appointment.getStartsAt().minusMinutes(30));
@@ -105,6 +109,7 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
     public AppointmentDTO GetInputData() {
         return new AppointmentDTO(
                 appointmentId,
+                groupMeetingId,
                 ownerId,
                 titleField.getText(),
                 locationField.getText(),
@@ -206,6 +211,7 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
         form.add(titleField, gbc);
 
         gbc.gridy = 1;
+        form.add(demoPresetPanel(), gbc);
 
         gbc.gridy = 2;
         form.add(row("◷", "Thời gian", spinnerPanel()), gbc);
@@ -252,6 +258,77 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
         actions.add(saveButton);
         root.add(actions, BorderLayout.SOUTH);
         setContentPane(root);
+    }
+
+    private JPanel demoPresetPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        panel.setOpaque(false);
+
+        JButton normal = new JButton("Demo thường");
+        JButton conflict = new JButton("Demo trùng lịch");
+        JButton joinGroup = new JButton("Demo tham gia nhóm");
+        JButton reminder = new JButton("Demo nhắc hẹn");
+
+        normal.addActionListener(e -> applyDemoPreset(
+                "Bình thường: đọc yêu cầu", "Thư viện",
+                7, 45, 8, 15, 30, "Nhắc lịch bình thường"
+        ));
+        conflict.addActionListener(e -> applyDemoPreset(
+                "Demo trùng lịch", "Phòng B2",
+                9, 0, 10, 0, 30, "Nhắc lịch trùng"
+        ));
+        joinGroup.addActionListener(e -> applyDemoPreset(
+                "Demo tham gia nhóm", "Google Meet",
+                9, 45, 10, 45, 10, "Nhắc tham gia nhóm"
+        ));
+        reminder.addActionListener(e -> applyReminderDemoPreset());
+
+        panel.add(normal);
+        panel.add(conflict);
+        panel.add(joinGroup);
+        panel.add(reminder);
+        return panel;
+    }
+
+    private void applyDemoPreset(String title, String location, int startHour, int startMinute,
+                                 int endHour, int endMinute, int reminderMinutes, String reminderMessage) {
+        LocalDate date = toLocalDateTime((Date) startSpinner.getValue()).toLocalDate();
+        LocalDateTime startsAt = date.atTime(startHour, startMinute);
+        LocalDateTime endsAt = date.atTime(endHour, endMinute);
+
+        titleField.setText(title);
+        locationField.setText(location);
+        setSpinnerDateTime(startSpinner, startsAt);
+        setSpinnerDateTime(endSpinner, endsAt);
+        setSpinnerDateTime(reminderDateTimeSpinner, startsAt.minusMinutes(reminderMinutes));
+        groupMeeting.setSelected(false);
+
+        reminderMinutesSpinner.setValue(reminderMinutes);
+        reminderMessageField.setText(reminderMessage);
+        reminderListModel.clear();
+        reminderListModel.addElement(new ReminderDTO(reminderMinutes, reminderMessage));
+        UpdateValidationState(isInputValid());
+    }
+
+    private void applyReminderDemoPreset() {
+        int reminderMinutes = 5;
+        LocalDateTime reminderAt = LocalDateTime.now().plusMinutes(5).withSecond(0).withNano(0);
+        LocalDateTime startsAt = reminderAt.plusMinutes(reminderMinutes);
+        LocalDateTime endsAt = startsAt.plusMinutes(45);
+        String reminderMessage = "Nhắc hẹn demo sau 5 phút";
+
+        titleField.setText("Demo có nhắc hẹn");
+        locationField.setText("Lab 3");
+        setSpinnerDateTime(startSpinner, startsAt);
+        setSpinnerDateTime(endSpinner, endsAt);
+        setSpinnerDateTime(reminderDateTimeSpinner, reminderAt);
+        groupMeeting.setSelected(false);
+
+        reminderMinutesSpinner.setValue(reminderMinutes);
+        reminderMessageField.setText(reminderMessage);
+        reminderListModel.clear();
+        reminderListModel.addElement(new ReminderDTO(reminderMinutes, reminderMessage));
+        UpdateValidationState(isInputValid());
     }
 
     private void deleteAppointment() {
@@ -369,6 +446,10 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
         JSpinner spinner = new JSpinner(new SpinnerDateModel(date, null, null, java.util.Calendar.MINUTE));
         spinner.setEditor(new JSpinner.DateEditor(spinner, "dd/MM/yyyy HH:mm"));
         return spinner;
+    }
+
+    private void setSpinnerDateTime(JSpinner spinner, LocalDateTime value) {
+        spinner.setValue(Date.from(value.atZone(ZoneId.systemDefault()).toInstant()));
     }
 
     private void bindValidation() {

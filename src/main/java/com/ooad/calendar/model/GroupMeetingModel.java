@@ -9,6 +9,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,14 +18,31 @@ public class GroupMeetingModel {
     private GroupMeeting findMatchingGroup(Appointment appointment) {
         long duration = Duration.between(appointment.getStartsAt(), appointment.getEndsAt()).toMinutes();
         String sql = """
-                SELECT * FROM group_meetings
-                WHERE LOWER(title) = LOWER(?) AND duration_minutes = ?
+                SELECT gm.*
+                FROM group_meetings gm
+                JOIN appointments a ON a.group_meeting_id = gm.id
+                WHERE LOWER(gm.title) = LOWER(?)
+                  AND gm.duration_minutes = ?
+                  AND LOWER(COALESCE(gm.location, '')) = LOWER(COALESCE(?, ''))
+                  AND a.starts_at = ?
+                  AND a.ends_at = ?
+                  AND a.owner_id <> ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM group_members members
+                      WHERE members.group_id = gm.id AND members.user_id = ?
+                  )
                 LIMIT 1
                 """;
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, appointment.getTitle());
             statement.setInt(2, Math.toIntExact(duration));
+            statement.setString(3, appointment.getLocation());
+            statement.setTimestamp(4, Timestamp.valueOf(appointment.getStartsAt()));
+            statement.setTimestamp(5, Timestamp.valueOf(appointment.getEndsAt()));
+            statement.setInt(6, appointment.getOwnerId());
+            statement.setInt(7, appointment.getOwnerId());
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
                     return new GroupMeeting(
