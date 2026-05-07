@@ -1,67 +1,48 @@
-# Add Calendar Appointment OOAD Demo
+# Google Calendar Swing MVP
 
-## Project Description
+Ứng dụng Java Swing mô phỏng giao diện Google Calendar cho bài toán thêm lịch hẹn theo mô hình MVP, lưu dữ liệu bằng H2.
 
-This project is a Java desktop application demo for the Object-Oriented Analysis and Design coursework use case **Add Calendar Appointment**.
+## Chức năng chính
 
-The application will later demonstrate a user viewing appointments and choosing to add a calendar appointment. The implementation will remain simple, use in-memory data, and follow the behavior described by the project sequence diagram.
+- Hiển thị lịch tuần kiểu Google Calendar, có sidebar tháng nhỏ và nút `Create`.
+- Kéo chọn một vùng trong cột ngày để mở form `Add appointment` với giờ bắt đầu/kết thúc tương ứng.
+- Nếu chỉ bấm một vị trí trên lịch, ứng dụng tự chọn khoảng 30 phút từ vị trí đó.
+- Bấm vào một cuộc hẹn đã tạo để chỉnh sửa thông tin hoặc xóa cuộc hẹn.
+- Chọn user trong vùng `My calendars` để chuyển sang lịch của user đó.
+- Có thể thêm user mới hoặc xóa user đang chọn; khi xóa user, các lịch hẹn của user đó cũng được xóa.
+- Vùng tab giữa sidebar cho phép xem `Cuộc họp`, `Cuộc hẹn`, `Remind`.
+- Trong tab `Cuộc họp` có thể xem người tham gia bằng double-click hoặc nút `Người tham gia`, và có thể rời cuộc họp nhóm; trong tab `Remind` có thể xóa từng reminder.
+- Validate ở View: không cho lưu khi tên trống hoặc thời lượng âm/bằng 0.
+- Presenter kiểm tra trùng lịch theo khoảng thời gian.
+- Khi trùng lịch, hiển thị cảnh báo và hỏi có thay thế lịch cũ không.
+- Lưu lịch hẹn và reminder vào H2.
+- Reminder có cả số phút nhắc trước và message; có thể thêm nhiều reminder tùy ý bằng nút nhanh 5p/10p/30p/1h/1 ngày, nhập số phút trực tiếp, hoặc chọn ngày-giờ nhắc cụ thể trước cuộc hẹn.
+- Nếu lịch mới trùng tên và thời lượng với cuộc họp nhóm có sẵn, hỏi người dùng có tham gia nhóm không.
+- Có thể tạo cuộc họp nhóm mới từ checkbox trong form.
 
-## Assignment Requirements
+## Cách chạy nhanh
 
-- Export a Class Diagram and Sequence Diagram as an image or PDF.
-- Provide a demo program with a main UI that shows the user's appointments and allows the user to choose Add Calendar Appointment.
-- Ensure the program follows the algorithm shown in the Sequence Diagram.
-- Provide a demo report file.
-- Provide a source code link.
+```powershell
+.\run.ps1
+```
 
-## Current Development Phase
+Database H2 được tạo tại:
 
-The project is currently in **Phase 3 - Core algorithm**.
+```text
+data/calendar.mv.db
+```
 
-This phase adds the controller and service logic for the Add Calendar Appointment use case. The console demo now validates appointment input, checks schedule conflicts, supports choosing another time or replacing an existing appointment, detects matching group meetings, joins a group meeting when selected, and adds reminders when a reminder method is selected. Swing UI and database storage are still intentionally left for later phases.
+## Chạy bằng Maven nếu máy có Maven
 
-## Planned Phases
-
-1. Phase 1 - Project foundation
-2. Phase 2 - Domain model
-3. Phase 3 - Core algorithm
-4. Phase 4 - Swing UI
-5. Phase 5 - Diagrams and demo report
-
-## How to Run
-
-Use Maven from the project root:
-
-```bash
+```powershell
 mvn clean compile exec:java
 ```
 
-Expected output includes the startup information plus six console scenarios:
+## Cấu trúc theo class diagram
 
-```text
-=== Case 1: Invalid blank name ===
-Message: Appointment name is required.
-
-=== Case 2: Invalid duration ===
-Message: End time must be after start time.
-
-=== Case 3: Conflict with Math Class, choose another time ===
-Message: This time conflicts with Math Class. Please choose another available time.
-
-=== Case 4: Conflict with Math Class, replace existing ===
-Message: Replaced Math Class with Chemistry Lab.
-
-=== Case 5: Match Project Meeting, join group meeting ===
-Message: Joined existing group meeting: Project Meeting.
-
-=== Case 6: Normal appointment with reminder ===
-Message: Added appointment: Dentist Appointment.
-```
-
-## Progress Checklist
-
-- [x] Phase 1 - Project foundation
-- [x] Phase 2 - Domain model
-- [x] Phase 3 - Core algorithm
-- [ ] Phase 4 - Swing UI
-- [ ] Phase 5 - Diagrams and demo report
+- `view`: `CalendarFrame`, `CalendarWeekPanel`, `AddAppointmentDialog`, `IAppointmentView`
+- `presenter`: `AppointmentPresenter`
+- `model`: `AppointmentModel`, `GroupMeetingModel`
+- `entity`: `Appointment`, `Reminder`, `GroupMeeting`
+- `dto`: `AppointmentDTO`
+- `config`: `Database`

@@ -1,0 +1,159 @@
+package com.ooad.calendar.model;
+
+import com.ooad.calendar.config.Database;
+import com.ooad.calendar.entity.Appointment;
+import com.ooad.calendar.entity.GroupMeeting;
+import com.ooad.calendar.entity.User;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+public class GroupMeetingModel {
+    private GroupMeeting findMatchingGroup(Appointment appointment) {
+        long duration = Duration.between(appointment.getStartsAt(), appointment.getEndsAt()).toMinutes();
+        String sql = """
+                SELECT * FROM group_meetings
+                WHERE LOWER(title) = LOWER(?) AND duration_minutes = ?
+                LIMIT 1
+                """;
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, appointment.getTitle());
+            statement.setInt(2, Math.toIntExact(duration));
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    return new GroupMeeting(
+                            rs.getInt("id"),
+                            rs.getString("title"),
+                            rs.getString("location"),
+                            rs.getInt("duration_minutes")
+                    );
+                }
+            }
+            return null;
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot find matching group meeting", ex);
+        }
+    }
+
+    public GroupMeeting FindMatchingGroupMeeting(Appointment appointment) {
+        return findMatchingGroup(appointment);
+    }
+
+    private void addMember(int groupId, int userId) {
+        String sql = "MERGE INTO group_members KEY(group_id, user_id) VALUES (?, ?)";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, groupId);
+            statement.setInt(2, userId);
+            statement.executeUpdate();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot add member to group meeting", ex);
+        }
+    }
+
+    public void AddParticipant(int groupId, int userId) {
+        addMember(groupId, userId);
+    }
+
+    public  int CreateGroupMeetingForAppointment(Appointment appointment) {
+        String sql = "INSERT INTO group_meetings(title, location, duration_minutes) VALUES (?, ?, ?)";
+        long duration = Duration.between(appointment.getStartsAt(), appointment.getEndsAt()).toMinutes();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            statement.setString(1, appointment.getTitle());
+            statement.setString(2, appointment.getLocation());
+            statement.setInt(3, Math.toIntExact(duration));
+            statement.executeUpdate();
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getInt(1);
+                }
+            }
+            throw new IllegalStateException("Group meeting id was not generated");
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot create group meeting", ex);
+        }
+    }
+
+
+
+    public List<GroupMeeting> findByUser(int userId) {
+        String sql = """
+                SELECT gm.*
+                FROM group_meetings gm
+                JOIN group_members members ON members.group_id = gm.id
+                WHERE members.user_id = ?
+                ORDER BY gm.title
+                """;
+        List<GroupMeeting> meetings = new ArrayList<>();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, userId);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    meetings.add(new GroupMeeting(
+                            rs.getInt("id"),
+                            rs.getString("title"),
+                            rs.getString("location"),
+                            rs.getInt("duration_minutes")
+                    ));
+                }
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot load group meetings", ex);
+        }
+        return meetings;
+    }
+
+    public List<User> findParticipants(int groupId) {
+        String sql = """
+                SELECT u.id, u.username, u.full_name
+                FROM users u
+                JOIN group_members members ON members.user_id = u.id
+                WHERE members.group_id = ?
+                ORDER BY u.full_name
+                """;
+        List<User> participants = new ArrayList<>();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, groupId);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    participants.add(new User(
+                            rs.getInt("id"),
+                            rs.getString("username"),
+                            rs.getString("full_name")
+                    ));
+                }
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot load group participants", ex);
+        }
+        return participants;
+    }
+
+    public void leaveGroup(int groupId, int userId) {
+        try (Connection connection = Database.getConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM group_members WHERE group_id = ? AND user_id = ?")) {
+                statement.setInt(1, groupId);
+                statement.setInt(2, userId);
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE appointments SET group_meeting_id = NULL WHERE owner_id = ? AND group_meeting_id = ?")) {
+                statement.setInt(1, userId);
+                statement.setInt(2, groupId);
+                statement.executeUpdate();
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot leave group meeting", ex);
+        }
+    }
+}
