@@ -136,6 +136,30 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
     }
 
     @Override
+    public void ShowMultipleConflictsWarning(List<Appointment> conflicts) {
+        StringBuilder message = new StringBuilder("Khoảng thời gian này trùng với nhiều lịch hẹn:\n");
+        int limit = Math.min(conflicts.size(), 5);
+        for (int i = 0; i < limit; i++) {
+            Appointment conflict = conflicts.get(i);
+            message.append("- ")
+                    .append(conflict.getTitle())
+                    .append(" lúc ")
+                    .append(conflict.getStartsAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")))
+                    .append('\n');
+        }
+        if (conflicts.size() > limit) {
+            message.append("... và ").append(conflicts.size() - limit).append(" lịch khác.\n");
+        }
+        message.append("Vui lòng chọn khoảng thời gian khác.");
+        JOptionPane.showMessageDialog(
+                this,
+                message.toString(),
+                "Trùng nhiều lịch",
+                JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    @Override
     public boolean RequestAppointmentReplacement(Appointment conflict) {
         String time = conflict.getStartsAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
         int choice = JOptionPane.showConfirmDialog(
@@ -517,9 +541,15 @@ public class AddAppointmentDialog extends JDialog implements IAppointmentView {
 
     private void applyReminderSelection(Appointment appointment) {
         reminderListModel.clear();
+        boolean firstReminder = true;
         for (Reminder reminder : appointment.getReminders()) {
             if (reminder.message() != null && !reminder.message().isBlank()) {
                 reminderMessageField.setText(reminder.message());
+            }
+            if (firstReminder) {
+                reminderMinutesSpinner.setValue(reminder.minutesBefore());
+                setSpinnerDateTime(reminderDateTimeSpinner, appointment.getStartsAt().minusMinutes(reminder.minutesBefore()));
+                firstReminder = false;
             }
             reminderListModel.addElement(new ReminderDTO(reminder.minutesBefore(), reminder.message()));
         }

@@ -24,6 +24,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -40,7 +41,9 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class CalendarFrame extends JFrame {
     private static final Color GOOGLE_BLUE = new Color(26, 115, 232);
@@ -60,6 +63,7 @@ public class CalendarFrame extends JFrame {
     private final JList<Appointment> appointmentList = new JList<>(appointmentListModel);
     private final DefaultListModel<ReminderInfo> reminderListModel = new DefaultListModel<>();
     private final JList<ReminderInfo> reminderList = new JList<>(reminderListModel);
+    private final Set<Integer> shownReminderIds = new HashSet<>();
     private JScrollPane calendarScrollPane;
     private LocalDate today = systemToday();
     private LocalDate selectedDate = today;
@@ -81,6 +85,7 @@ public class CalendarFrame extends JFrame {
         buildUi();
         refreshUsers();
         refreshCalendar(true);
+        startReminderTimer();
     }
 
     public void setPresenter(AppointmentPresenter presenter) {
@@ -368,6 +373,44 @@ public class CalendarFrame extends JFrame {
             appointmentModel.deleteReminder(selected.getId());
             refreshCalendar();
         }
+    }
+
+    private void startReminderTimer() {
+        Timer reminderTimer = new Timer(30_000, e -> showDueReminders());
+        reminderTimer.setInitialDelay(1_000);
+        reminderTimer.start();
+    }
+
+    private void showDueReminders() {
+        try {
+            List<ReminderInfo> dueReminders = appointmentModel.findDueReminderInfos(currentUserId, LocalDateTime.now());
+            for (ReminderInfo reminder : dueReminders) {
+                if (shownReminderIds.add(reminder.getId())) {
+                    showReminderPopup(reminder);
+                }
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    ex.getMessage(),
+                    "Khong the kiem tra reminder",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private void showReminderPopup(ReminderInfo reminder) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String startsAt = reminder.getStartsAt() == null ? "" : reminder.getStartsAt().format(formatter);
+        JOptionPane.showMessageDialog(
+                this,
+                reminder.getMessage() + System.lineSeparator()
+                        + "Lich hen: " + reminder.getAppointmentTitle() + System.lineSeparator()
+                        + "Bat dau: " + startsAt,
+                "Reminder",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+        refreshSidebarDetails();
     }
 
     private void seedDemoData() {

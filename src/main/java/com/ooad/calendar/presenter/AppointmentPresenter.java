@@ -8,6 +8,8 @@ import com.ooad.calendar.model.AppointmentModel;
 import com.ooad.calendar.model.GroupMeetingModel;
 import com.ooad.calendar.view.IAppointmentView;
 
+import java.util.List;
+
 public class AppointmentPresenter {
     private final AppointmentModel appointmentModel;
     private final GroupMeetingModel groupMeetingModel;
@@ -21,13 +23,24 @@ public class AppointmentPresenter {
 
     public void SaveAppointment(IAppointmentView view) {
         AppointmentDTO dto = view.GetInputData();
-        Appointment conflict = appointmentModel.FindConflictingAppointment(dto.ownerId(), dto.startsAt(), dto.endsAt(), dto.appointmentId());
-        if (conflict != null) {
+        List<Appointment> conflicts = appointmentModel.FindConflictingAppointments(
+                dto.ownerId(),
+                dto.startsAt(),
+                dto.endsAt(),
+                dto.appointmentId()
+        );
+        Integer conflictIdToReplace = null;
+        if (conflicts.size() > 1) {
+            view.ShowMultipleConflictsWarning(conflicts);
+            return;
+        }
+        if (conflicts.size() == 1) {
+            Appointment conflict = conflicts.get(0);
             view.ShowConflictWarning(conflict);
             if (!view.RequestAppointmentReplacement(conflict)) {
                 return;
             }
-            appointmentModel.DeleteAppointment(conflict.getId());
+            conflictIdToReplace = conflict.getId();
         }
 
         Appointment appointment = new Appointment(
@@ -43,22 +56,26 @@ public class AppointmentPresenter {
                 appointment.getReminders().add(new Reminder(reminder.minutesBefore(), reminder.message()))
         );
 
-        if (appointment.getGroupMeetingId() == null) {
+        AppointmentModel.AppointmentTransactionStep beforeSave = null;
+        boolean canPromptForGroup = dto.appointmentId() == null || dto.groupMeeting();
+        if (appointment.getGroupMeetingId() == null && canPromptForGroup) {
             GroupMeeting group = groupMeetingModel.FindMatchingGroupMeeting(appointment);
             if (group != null && view.RequestJoinGroupMeeting(group.title())) {
-                groupMeetingModel.AddParticipant(group.id(), dto.ownerId());
                 appointment.setGroupMeetingId(group.id());
+                beforeSave = connection -> groupMeetingModel.AddParticipant(connection, group.id(), dto.ownerId());
             } else if (dto.groupMeeting()) {
-                int groupId = groupMeetingModel.CreateGroupMeetingForAppointment(appointment);
-                groupMeetingModel.AddParticipant(groupId, dto.ownerId());
-                appointment.setGroupMeetingId(groupId);
+                beforeSave = connection -> {
+                    int groupId = groupMeetingModel.CreateGroupMeetingForAppointment(connection, appointment);
+                    groupMeetingModel.AddParticipant(connection, groupId, dto.ownerId());
+                    appointment.setGroupMeetingId(groupId);
+                };
             }
         }
 
         if (dto.appointmentId() == null) {
-            appointmentModel.Save(appointment);
+            appointmentModel.SaveReplacingConflict(appointment, conflictIdToReplace, beforeSave);
         } else {
-            appointmentModel.Update(appointment);
+            appointmentModel.UpdateReplacingConflict(appointment, conflictIdToReplace, beforeSave);
         }
         calendarRefresh.run();
         view.CloseWindow();
@@ -76,7 +93,12 @@ public class AppointmentPresenter {
 
     public boolean CheckAppointmentConflict(IAppointmentView view) {
         AppointmentDTO dto = view.GetInputData();
-        return appointmentModel.CheckConflict(dto.ownerId(), dto.startsAt(), dto.endsAt());
+        return !appointmentModel.FindConflictingAppointments(
+                dto.ownerId(),
+                dto.startsAt(),
+                dto.endsAt(),
+                dto.appointmentId()
+        ).isEmpty();
     }
 
     public void HandleAppointmentReplacement(IAppointmentView view, Appointment conflict) {

@@ -16,12 +16,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AppointmentModel {
+    @FunctionalInterface
+    public interface AppointmentTransactionStep {
+        void execute(Connection connection) throws Exception;
+    }
+
     private boolean hasConflict(int userId, LocalDateTime start, LocalDateTime end) {
-        return findConflict(userId, start, end) != null;
+        return !findConflicts(userId, start, end, null).isEmpty();
     }
 
     public boolean CheckConflict(int userId, LocalDateTime start, LocalDateTime end) {
-        return findConflict(userId, start, end) != null;
+        return !findConflicts(userId, start, end, null).isEmpty();
     }
 
     private Appointment findConflict(int userId, LocalDateTime start, LocalDateTime end) {
@@ -29,13 +34,18 @@ public class AppointmentModel {
     }
 
     private Appointment findConflict(int userId, LocalDateTime start, LocalDateTime end, Integer ignoredAppointmentId) {
+        List<Appointment> conflicts = findConflicts(userId, start, end, ignoredAppointmentId);
+        return conflicts.isEmpty() ? null : conflicts.get(0);
+    }
+
+    private List<Appointment> findConflicts(int userId, LocalDateTime start, LocalDateTime end, Integer ignoredAppointmentId) {
         String sql = """
                 SELECT * FROM appointments
                 WHERE owner_id = ? AND starts_at < ? AND ends_at > ?
                   AND (? IS NULL OR id <> ?)
                 ORDER BY starts_at
-                LIMIT 1
                 """;
+        List<Appointment> conflicts = new ArrayList<>();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, userId);
@@ -49,11 +59,11 @@ public class AppointmentModel {
                 statement.setInt(5, ignoredAppointmentId);
             }
             try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    return mapAppointment(rs);
+                while (rs.next()) {
+                    conflicts.add(mapAppointment(rs));
                 }
-                return null;
             }
+            return conflicts;
         } catch (Exception ex) {
             throw new IllegalStateException("Cannot check calendar conflict", ex);
         }
@@ -67,13 +77,20 @@ public class AppointmentModel {
         return findConflict(userId, start, end, ignoredAppointmentId);
     }
 
-    private void save(Appointment appointment) {
+    public List<Appointment> FindConflictingAppointments(int userId, LocalDateTime start, LocalDateTime end) {
+        return findConflicts(userId, start, end, null);
+    }
+
+    public List<Appointment> FindConflictingAppointments(int userId, LocalDateTime start, LocalDateTime end, Integer ignoredAppointmentId) {
+        return findConflicts(userId, start, end, ignoredAppointmentId);
+    }
+
+    private void save(Connection connection, Appointment appointment) throws Exception {
         String sql = """
                 INSERT INTO appointments(owner_id, group_meeting_id, title, location, starts_at, ends_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """;
-        try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setInt(1, appointment.getOwnerId());
             if (appointment.getGroupMeetingId() == null) {
                 statement.setNull(2, java.sql.Types.INTEGER);
@@ -91,23 +108,20 @@ public class AppointmentModel {
                 }
             }
             saveReminders(connection, appointment);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Cannot save appointment", ex);
         }
     }
 
     public void Save(Appointment appointment) {
-        save(appointment);
+        SaveReplacingConflict(appointment, null, null);
     }
 
-    private void update(Appointment appointment) {
+    private void update(Connection connection, Appointment appointment) throws Exception {
         String sql = """
                 UPDATE appointments
                 SET group_meeting_id = ?, title = ?, location = ?, starts_at = ?, ends_at = ?
                 WHERE id = ? AND owner_id = ?
                 """;
-        try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             if (appointment.getGroupMeetingId() == null) {
                 statement.setNull(1, java.sql.Types.INTEGER);
             } else {
@@ -121,20 +135,58 @@ public class AppointmentModel {
             statement.setInt(7, appointment.getOwnerId());
             statement.executeUpdate();
             replaceReminders(connection, appointment);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Cannot update appointment", ex);
         }
     }
 
     public void Update(Appointment appointment) {
-        update(appointment);
+        UpdateReplacingConflict(appointment, null, null);
+    }
+
+    public void SaveReplacingConflict(Appointment appointment, Integer conflictIdToReplace,
+                                      AppointmentTransactionStep beforeSave) {
+        persistAppointment(appointment, true, conflictIdToReplace, beforeSave, "Cannot save appointment");
+    }
+
+    public void UpdateReplacingConflict(Appointment appointment, Integer conflictIdToReplace,
+                                        AppointmentTransactionStep beforeSave) {
+        persistAppointment(appointment, false, conflictIdToReplace, beforeSave, "Cannot update appointment");
+    }
+
+    private void persistAppointment(Appointment appointment, boolean create, Integer conflictIdToReplace,
+                                    AppointmentTransactionStep beforeSave, String errorMessage) {
+        try {
+            Database.withTransaction(connection -> {
+                if (beforeSave != null) {
+                    beforeSave.execute(connection);
+                }
+                if (create) {
+                    save(connection, appointment);
+                } else {
+                    update(connection, appointment);
+                }
+                if (conflictIdToReplace != null) {
+                    deleteAppointment(connection, conflictIdToReplace);
+                }
+                return null;
+            });
+        } catch (Exception ex) {
+            throw new IllegalStateException(errorMessage, ex);
+        }
+    }
+
+    private void deleteAppointment(Connection connection, int id) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM appointments WHERE id = ?")) {
+            statement.setInt(1, id);
+            statement.executeUpdate();
+        }
     }
 
     private void deleteAppointment(int id) {
-        try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM appointments WHERE id = ?")) {
-            statement.setInt(1, id);
-            statement.executeUpdate();
+        try {
+            Database.withTransaction(connection -> {
+                deleteAppointment(connection, id);
+                return null;
+            });
         } catch (Exception ex) {
             throw new IllegalStateException("Cannot delete appointment", ex);
         }
@@ -196,7 +248,7 @@ public class AppointmentModel {
 
     public List<ReminderInfo> findReminderInfos(int userId) {
         String sql = """
-                SELECT r.id, r.appointment_id, a.title, r.minutes_before, r.message
+                SELECT r.id, r.appointment_id, a.title, a.starts_at, r.minutes_before, r.message
                 FROM reminders r
                 JOIN appointments a ON a.id = r.appointment_id
                 WHERE a.owner_id = ?
@@ -213,7 +265,8 @@ public class AppointmentModel {
                             rs.getInt("appointment_id"),
                             rs.getString("title"),
                             rs.getInt("minutes_before"),
-                            rs.getString("message")
+                            rs.getString("message"),
+                            rs.getTimestamp("starts_at").toLocalDateTime()
                     ));
                 }
             }
@@ -221,6 +274,19 @@ public class AppointmentModel {
             throw new IllegalStateException("Cannot load reminders", ex);
         }
         return reminders;
+    }
+
+    public List<ReminderInfo> findDueReminderInfos(int userId, LocalDateTime now) {
+        List<ReminderInfo> dueReminders = new ArrayList<>();
+        for (ReminderInfo reminder : findReminderInfos(userId)) {
+            if (reminder.getRemindAt() != null
+                    && !reminder.getRemindAt().isAfter(now)
+                    && reminder.getStartsAt() != null
+                    && !reminder.getStartsAt().plusMinutes(1).isBefore(now)) {
+                dueReminders.add(reminder);
+            }
+        }
+        return dueReminders;
     }
 
     public void deleteReminder(int reminderId) {

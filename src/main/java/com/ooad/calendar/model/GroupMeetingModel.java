@@ -63,13 +63,18 @@ public class GroupMeetingModel {
         return findMatchingGroup(appointment);
     }
 
-    private void addMember(int groupId, int userId) {
+    private void addMember(Connection connection, int groupId, int userId) throws Exception {
         String sql = "MERGE INTO group_members KEY(group_id, user_id) VALUES (?, ?)";
-        try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, groupId);
             statement.setInt(2, userId);
             statement.executeUpdate();
+        }
+    }
+
+    private void addMember(int groupId, int userId) {
+        try (Connection connection = Database.getConnection()) {
+            addMember(connection, groupId, userId);
         } catch (Exception ex) {
             throw new IllegalStateException("Cannot add member to group meeting", ex);
         }
@@ -79,11 +84,14 @@ public class GroupMeetingModel {
         addMember(groupId, userId);
     }
 
-    public  int CreateGroupMeetingForAppointment(Appointment appointment) {
+    public void AddParticipant(Connection connection, int groupId, int userId) throws Exception {
+        addMember(connection, groupId, userId);
+    }
+
+    private int createGroupMeetingForAppointment(Connection connection, Appointment appointment) throws Exception {
         String sql = "INSERT INTO group_meetings(title, location, duration_minutes) VALUES (?, ?, ?)";
         long duration = Duration.between(appointment.getStartsAt(), appointment.getEndsAt()).toMinutes();
-        try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, appointment.getTitle());
             statement.setString(2, appointment.getLocation());
             statement.setInt(3, Math.toIntExact(duration));
@@ -94,12 +102,20 @@ public class GroupMeetingModel {
                 }
             }
             throw new IllegalStateException("Group meeting id was not generated");
+        }
+    }
+
+    public int CreateGroupMeetingForAppointment(Appointment appointment) {
+        try (Connection connection = Database.getConnection()) {
+            return createGroupMeetingForAppointment(connection, appointment);
         } catch (Exception ex) {
             throw new IllegalStateException("Cannot create group meeting", ex);
         }
     }
 
-
+    public int CreateGroupMeetingForAppointment(Connection connection, Appointment appointment) throws Exception {
+        return createGroupMeetingForAppointment(connection, appointment);
+    }
 
     public List<GroupMeeting> findByUser(int userId) {
         String sql = """

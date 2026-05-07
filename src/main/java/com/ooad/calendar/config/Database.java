@@ -17,6 +17,28 @@ public final class Database {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
+    @FunctionalInterface
+    public interface TransactionCallback<T> {
+        T execute(Connection connection) throws Exception;
+    }
+
+    public static <T> T withTransaction(TransactionCallback<T> callback) throws Exception {
+        try (Connection connection = getConnection()) {
+            boolean originalAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                T result = callback.execute(connection);
+                connection.commit();
+                return result;
+            } catch (Exception ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(originalAutoCommit);
+            }
+        }
+    }
+
     public static void initialize() throws SQLException {
         try (Connection connection = getConnection(); Statement statement = connection.createStatement()) {
             statement.execute("""
